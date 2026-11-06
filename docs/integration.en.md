@@ -57,10 +57,12 @@ READY --readMeasurementData()--> IDLE
 
 Before 300 ms, `measurementComplete()` returns `complete=false` without a UART
 request. Calls sooner than the configured poll interval also return without a
-request. See [`UnoNonBlockingMeasurement`](../examples/UnoNonBlockingMeasurement/UnoNonBlockingMeasurement.ino).
+request. See [`UnoCooperativePolling`](../examples/UnoCooperativePolling/UnoCooperativePolling.ino).
 
-This avoids blocking for the entire conversion; it does not make UART I/O fully
-asynchronous. Start and each due status poll can block for one response timeout.
+The default 30-second deadline is a measurement timeout limit, not the normal
+conversion duration. This avoids blocking for the entire conversion; it does not
+make UART I/O fully asynchronous. Start and each due status poll can block for
+one response timeout.
 The final 18-byte data operation uses one transaction and can block for about
 300 ms with defaults. Budget both waits if a due status poll and data read run
 back-to-back. Use a dedicated task or asynchronous UART state machine

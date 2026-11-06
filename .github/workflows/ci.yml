@@ -47,7 +47,7 @@ jobs:
         run: python -m pip install --requirement requirements-ci.txt
 
       - name: Build examples
-        run: pio run -e uno_basic -e uno_nonblocking
+        run: pio run -e uno_basic -e uno_cooperative_polling
 
   core2-build:
     name: M5Stack Core2 examples
@@ -90,7 +90,7 @@ jobs:
             core: arduino:avr@1.8.6
             fqbn: arduino:avr:uno
             first: UnoBasicMeasurement
-            second: UnoNonBlockingMeasurement
+            second: UnoCooperativePolling
           - board: core2
             core: m5stack:esp32@3.3.10
             fqbn: m5stack:esp32:m5stack_core2
@@ -170,7 +170,7 @@ jobs:
           src/SLT5006.h src/SLT5006.cpp
           tests/fake_arduino/Arduino.h tests/test_slt5006.cpp
           examples/UnoBasicMeasurement/UnoBasicMeasurement.ino
-          examples/UnoNonBlockingMeasurement/UnoNonBlockingMeasurement.ino
+          examples/UnoCooperativePolling/UnoCooperativePolling.ino
           examples/M5Core2QuickStart/M5Core2QuickStart.ino
           examples/M5Core2CloudLogger/M5Core2CloudLogger.ino
           examples/M5Core2CloudLogger/CloudRecord.h
@@ -188,7 +188,7 @@ jobs:
           tests/fake_logger/FS.h
           tests/test_logger_config.cpp
           tests/test_cloud_record.cpp
-          pio/uno_basic/main.cpp pio/uno_nonblocking/main.cpp
+          pio/uno_basic/main.cpp pio/uno_cooperative_polling/main.cpp
           pio/core2_quick_start/main.cpp pio/core2_cloud_logger/main.cpp
 
       - name: Run static analysis

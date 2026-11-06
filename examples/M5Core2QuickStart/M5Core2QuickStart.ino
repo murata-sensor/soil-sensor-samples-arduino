@@ -128,12 +128,18 @@ void draw() {
   drawMeasurementRow("EC bulk", data.ecBulkDsM, 3, "dS/m", 127);
   drawMeasurementRow("EC pore", data.ecPoreDsM, 3, "dS/m", 145);
   drawMeasurementRow("Supply", data.batteryVoltageV, 2, "V", 163);
+  M5.Display.setTextSize(1);
+  char vwcLine[80];
+  if (haveMeasurement) {
+    snprintf(vwcLine, sizeof(vwcLine), "VWC rock: %.1f%%  VWC coco: %.1f%%",
+             data.vwcRockPercent, data.vwcCocoPercent);
+  } else {
+    snprintf(vwcLine, sizeof(vwcLine), "VWC rock: --%%  VWC coco: --%%");
+  }
+  M5.Display.drawString(vwcLine, 8, 187);
   if (haveInfo && haveMeasurement && SLT5006::supportsEcPoreCoco(info)) {
-    M5.Display.setTextSize(1);
-    M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
     M5.Display.setCursor(8, 195);
-    M5.Display.printf("Coco: VWC %.1f%% / EC %.3f dS/m", data.vwcCocoPercent,
-                      data.ecPoreCocoDsM);
+    M5.Display.printf("EC pore coco: %.3f dS/m", data.ecPoreCocoDsM);
   }
   drawCore2Battery();
   M5.Display.fillRect(0, 218, M5.Display.width(), 22, TFT_NAVY);

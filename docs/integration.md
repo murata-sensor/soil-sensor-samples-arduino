@@ -56,9 +56,9 @@ MEASURING --measurementComplete(true)--> READY
 READY --readMeasurementData()--> IDLE
 ```
 
-`measurementComplete()`は、開始後300 msまではUART要求を送らず`complete=false`を返します。その後も設定したpoll間隔より短い呼出しはUART要求を送らないため、メインループから繰り返し呼べます。完全な例は[`UnoNonBlockingMeasurement`](../examples/UnoNonBlockingMeasurement/UnoNonBlockingMeasurement.ino)を参照してください。
+`measurementComplete()`は、開始後300 msまではUART要求を送らず`complete=false`を返します。その後も設定したpoll間隔より短い呼出しはUART要求を送らないため、メインループから繰り返し呼べます。完全な例は[`UnoCooperativePolling`](../examples/UnoCooperativePolling/UnoCooperativePolling.ino)を参照してください。
 
-これは最大30秒の測定変換待ちを協調化するAPIで、UART受信まで完全に非同期化するものではありません。`startMeasurement()`、pollが必要な`measurementComplete()`、18 byteを読む`readMeasurementData()`はそれぞれ1取引で、最大1回分のresponse timeout（既定値では約300 ms）だけ呼出し元を停止する可能性があります。状態確認と値取得を続けて呼ぶ場合は両方の待ち時間を見込みます。厳密な応答性が必要な場合は、独自の非同期UART状態機械、RTOS task、または専用通信処理へ分離してください。
+これは測定変換待ちを協調化するAPIで、UART受信まで完全に非同期化するものではありません。既定の30秒は測定完了待ちのタイムアウト上限で、通常の測定所要時間ではありません。`startMeasurement()`、pollが必要な`measurementComplete()`、18 byteを読む`readMeasurementData()`はそれぞれ1取引で、最大1回分のresponse timeout（既定値では約300 ms）だけ呼出し元を停止する可能性があります。状態確認と値取得を続けて呼ぶ場合は両方の待ち時間を見込みます。厳密な応答性が必要な場合は、独自の非同期UART状態機械、RTOS task、または専用通信処理へ分離してください。
 
 順序外で`readMeasurementData()`を呼ぶと`MEASUREMENT_NOT_READY`になります。通信エラー時は状態を破棄し、間隔を置いて`startMeasurement()`から再試行してください。
 

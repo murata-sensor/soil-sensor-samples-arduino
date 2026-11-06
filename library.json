@@ -41,10 +41,10 @@
       ]
     },
     {
-      "name": "UnoNonBlockingMeasurement",
-      "base": "examples/UnoNonBlockingMeasurement",
+      "name": "UnoCooperativePolling",
+      "base": "examples/UnoCooperativePolling",
       "files": [
-        "UnoNonBlockingMeasurement.ino"
+        "UnoCooperativePolling.ino"
       ]
     },
     {

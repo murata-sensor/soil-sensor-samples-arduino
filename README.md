@@ -4,10 +4,16 @@ English (default) | [日本語](README.ja.md)
 
 Arduino and M5Stack samples with a reusable UART driver for one Murata **SLT5006** soil sensor.
 
-| Platform | First example | Additional features |
+| Platform | First example | Optional advanced example |
 |---|---|---|
-| Arduino Uno / classic Nano | `UnoBasicMeasurement` | `UnoNonBlockingMeasurement` |
+| Arduino Uno / classic Nano | `UnoBasicMeasurement` | `UnoCooperativePolling` |
 | M5Stack Core2 | `M5Core2QuickStart` | `M5Core2CloudLogger` |
+
+Start with the first example for your board. The advanced examples serve
+different purposes: `UnoCooperativePolling` demonstrates an alternative
+measurement-control API, while `M5Core2CloudLogger` is a reference application
+for recording and uploading measurements. Neither is required for the first
+sensor check.
 
 ### Example naming
 
@@ -138,7 +144,7 @@ This repository includes PlatformIO environments for Arduino Uno and M5Stack Cor
 
 ```sh
 pio run -e uno_basic
-pio run -e uno_nonblocking
+pio run -e uno_cooperative_polling
 pio run -e core2_quick_start
 pio run -e core2_cloud_logger
 ```
@@ -155,7 +161,7 @@ After uploading, disconnect USB and turn off the Arduino, sensor, and external s
 pio device monitor -b 115200
 ```
 
-Use `uno_nonblocking` instead of `uno_basic` to upload the cooperative example. The root `platformio.ini` and wrappers under `pio/` exist only to build the sketches under `examples/`; inspect and edit the sketches in `examples/`. Do not copy the repository test configuration into an application project.
+Use `uno_cooperative_polling` instead of `uno_basic` to upload the cooperative example. The root `platformio.ini` and wrappers under `pio/` exist only to build the sketches under `examples/`; inspect and edit the sketches in `examples/`. Do not copy the repository test configuration into an application project.
 
 To use the library from another PlatformIO project, declare the published Git repository in `lib_deps`:
 
@@ -173,10 +179,18 @@ In a PlatformIO `.cpp` source file, include `Arduino.h` before `SLT5006.h`. The 
 
 ## Examples
 
-- [`UnoBasicMeasurement`](examples/UnoBasicMeasurement/UnoBasicMeasurement.ino): reads identity, then waits about five seconds after each completed measurement.
-- [`UnoNonBlockingMeasurement`](examples/UnoNonBlockingMeasurement/UnoNonBlockingMeasurement.ino): cooperatively applies the configured 30-second conversion-wait limit so other loop work can continue. UART calls still block as described below.
-- [`M5Core2QuickStart`](examples/M5Core2QuickStart/M5Core2QuickStart.ino): displays sensor identity and measurements on M5Stack Core2.
-- [`M5Core2CloudLogger`](examples/M5Core2CloudLogger/M5Core2CloudLogger.ino): adds SD/CSV logging, Wi-Fi, and resilient Google Sheets uploads.
+### First sensor check
+
+- [`UnoBasicMeasurement`](examples/UnoBasicMeasurement/UnoBasicMeasurement.ino): beginner example that reads identity, waits for each measurement to finish, and waits about five seconds before the next measurement.
+- [`M5Core2QuickStart`](examples/M5Core2QuickStart/M5Core2QuickStart.ino): displays sensor identity and measurements on M5Stack Core2, including all three VWC conversions (general soil, rock wool, and coco peat) regardless of sensor firmware. Coco-peat pore EC is displayed only on supported firmware. It uses cooperative polling to keep button handling and battery-display updates running during conversion waiting.
+
+### Optional advanced examples
+
+- [`UnoCooperativePolling`](examples/UnoCooperativePolling/UnoCooperativePolling.ino): reports the same sensor identity and measurement fields as `UnoBasicMeasurement`, but starts measurements and polls for completion separately while blinking the built-in LED during conversion waiting. Use it when other loop work must continue; it is not required to learn basic sensor use. UART calls still block as described below.
+- [`M5Core2CloudLogger`](examples/M5Core2CloudLogger/M5Core2CloudLogger.ino): reference application for SD/CSV logging, Wi-Fi, and resilient Google Sheets uploads. It requires additional logger setup; it is not a minimal measurement example.
+
+The default 30-second measurement timeout is a limit for waiting for conversion,
+not the normal measurement duration.
 
 ## Measurement fields
 

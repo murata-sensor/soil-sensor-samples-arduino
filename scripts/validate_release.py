@@ -151,7 +151,7 @@ def validate_metadata(errors: list[str], tracked: set[str]) -> None:
         "m5stack/M5Unified@^0.2.17",
         "bblanchon/ArduinoJson@^7.4.2",
         "[env:uno_basic]",
-        "[env:uno_nonblocking]",
+        "[env:uno_cooperative_polling]",
         "[env:core2_quick_start]",
         "[env:core2_cloud_logger]",
     )

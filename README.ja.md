@@ -4,10 +4,15 @@
 
 村田製作所の土壌センサ **SLT5006** をArduino Uno／NanoおよびM5Stack Core2から動かすためのサンプルと、再利用可能なUARTドライバです。
 
-| Platform | 最初に使うサンプル | 追加機能 |
+| Platform | 最初に使うサンプル | 必要に応じて使う応用例 |
 |---|---|---|
-| Arduino Uno / Classic Nano | `UnoBasicMeasurement` | `UnoNonBlockingMeasurement` |
+| Arduino Uno / Classic Nano | `UnoBasicMeasurement` | `UnoCooperativePolling` |
 | M5Stack Core2 | `M5Core2QuickStart` | `M5Core2CloudLogger` |
+
+まずは使用するボードの「最初に使うサンプル」で動作を確認してください。
+応用例の目的は異なり、`UnoCooperativePolling`は測定制御APIの使い分け、
+`M5Core2CloudLogger`は測定値の記録・クラウド連携を示す参考実装です。
+どちらも最初のセンサ動作確認には不要です。
 
 ### サンプルの命名規則
 
@@ -151,7 +156,7 @@ NVS・SD設定はこのサンプルでは暗号化していません。
 
 ```sh
 pio run -e uno_basic
-pio run -e uno_nonblocking
+pio run -e uno_cooperative_polling
 pio run -e core2_quick_start
 pio run -e core2_cloud_logger
 ```
@@ -168,7 +173,7 @@ pio run -e uno_basic -t upload
 pio device monitor -b 115200
 ```
 
-協調ポーリング例を書き込む場合は`uno_basic`を`uno_nonblocking`へ変更します。ルートの`platformio.ini`と`pio/`内のwrapperは、`examples/`にあるスケッチをビルドするための検証用です。参照・編集するサンプル本体は`examples/`にあり、リポジトリの検証設定を利用者のアプリケーションへコピーする必要はありません。
+協調ポーリング例を書き込む場合は`uno_basic`を`uno_cooperative_polling`へ変更します。ルートの`platformio.ini`と`pio/`内のwrapperは、`examples/`にあるスケッチをビルドするための検証用です。参照・編集するサンプル本体は`examples/`にあり、リポジトリの検証設定を利用者のアプリケーションへコピーする必要はありません。
 
 自分のPlatformIOプロジェクトからライブラリを使う場合は、公開後のGitリポジトリを`lib_deps`へ指定します。
 
@@ -186,10 +191,17 @@ PlatformIOの`.cpp`ファイルでは、`#include <Arduino.h>`に続けて`#incl
 
 ## サンプル
 
-- [`UnoBasicMeasurement`](examples/UnoBasicMeasurement/UnoBasicMeasurement.ino): センサ情報を1回読み、各測定の完了後に約5秒待って次を測定する初心者向け例。
-- [`UnoNonBlockingMeasurement`](examples/UnoNonBlockingMeasurement/UnoNonBlockingMeasurement.ino): 既定30秒の測定変換待ちを協調ポーリングにし、その間もLED制御などを続ける組み込み例。UART呼出し自体の停止時間は後述します。
-- [`M5Core2QuickStart`](examples/M5Core2QuickStart/M5Core2QuickStart.ino): Core2画面とSerial Monitorにセンサ情報と測定値を表示する例。
-- [`M5Core2CloudLogger`](examples/M5Core2CloudLogger/M5Core2CloudLogger.ino): SD/CSV、Wi-Fi、Google Sheetsへの再送付きuploadを追加する例。
+### 最初の動作確認
+
+- [`UnoBasicMeasurement`](examples/UnoBasicMeasurement/UnoBasicMeasurement.ino): センサ情報を1回読み、測定完了まで待ち、各測定の完了後に約5秒待って次を測定する初心者向け例。
+- [`M5Core2QuickStart`](examples/M5Core2QuickStart/M5Core2QuickStart.ino): Core2画面とSerial Monitorにセンサ情報と測定値を表示する例。一般土壌・ロックウール・ココピートの3種類のVWC換算値をFirmwareに依存せず画面表示します。ココピート向けPore ECは対応Firmwareの場合のみ表示します。測定変換待ちの間もボタン処理やバッテリー表示の更新を続けるため、協調ポーリングを使用します。
+
+### 必要に応じて使う応用例
+
+- [`UnoCooperativePolling`](examples/UnoCooperativePolling/UnoCooperativePolling.ino): `UnoBasicMeasurement`と同じセンサ情報・測定項目を表示しながら、測定開始・完了確認・値取得を分け、測定変換待ちの間も内蔵LEDを点滅させる応用例。他のループ処理を続けたい場合の参考で、基本的なセンサの使い方を学ぶためには不要です。UART呼出し自体の停止時間は後述します。
+- [`M5Core2CloudLogger`](examples/M5Core2CloudLogger/M5Core2CloudLogger.ino): SD/CSV記録、Wi-Fi、Google Sheetsへの再送付きuploadを示す参考実装。追加のロガー設定が必要で、最小限の測定例ではありません。
+
+既定の測定タイムアウト30秒は、測定変換の完了を待つ上限であり、通常の測定所要時間を意味しません。
 
 ## 取得できる値
 
