@@ -1,0 +1,6 @@
+SLT5006	KEYWORD1
+readInfo	KEYWORD2
+readMeasurement	KEYWORD2
+startMeasurement	KEYWORD2
+measurementComplete	KEYWORD2
+readMeasurementData	KEYWORD2

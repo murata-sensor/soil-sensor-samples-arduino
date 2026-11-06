@@ -1,0 +1,216 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  host-tests:
+    name: Host tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Configure
+        run: >-
+          cmake -S tests -B build/host
+          -DCMAKE_BUILD_TYPE=Debug
+          -DSLT5006_ENABLE_SANITIZERS=${{ matrix.os == 'ubuntu-latest' && 'ON' || 'OFF' }}
+
+      - name: Build
+        run: cmake --build build/host --config Debug --parallel
+
+      - name: Test
+        run: ctest --test-dir build/host -C Debug --output-on-failure
+
+  uno-build:
+    name: Arduino Uno examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
+
+      - name: Install PlatformIO
+        run: python -m pip install --requirement requirements-ci.txt
+
+      - name: Build examples
+        run: pio run -e uno_basic -e uno_nonblocking
+
+  core2-build:
+    name: M5Stack Core2 examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
+
+      - name: Install PlatformIO
+        run: python -m pip install --requirement requirements-ci.txt
+
+      - name: Build examples
+        run: pio run -e core2_quick_start -e core2_cloud_logger
+
+      - name: Test logger storage, configuration, NVS and USB protocol
+        run: |
+          cmake -S tests -B build/logger -DCMAKE_BUILD_TYPE=Debug \
+            -DARDUINOJSON_INCLUDE_DIR="$PWD/.pio/libdeps/core2_cloud_logger/ArduinoJson/src"
+          cmake --build build/logger --target logger_config_tests cloud_record_tests
+          ctest --test-dir build/logger -R '^(logger_config_tests|cloud_record_tests)$' --output-on-failure
+
+  arduino-ide-build:
+    name: Arduino IDE ZIP (${{ matrix.board }})
+    runs-on: ubuntu-latest
+    env:
+      ARDUINO_DIRECTORIES_DATA: ${{ runner.temp }}/arduino-data
+      ARDUINO_DIRECTORIES_DOWNLOADS: ${{ runner.temp }}/arduino-downloads
+      ARDUINO_DIRECTORIES_USER: ${{ runner.temp }}/arduino-user
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - board: uno
+            core: arduino:avr@1.8.6
+            fqbn: arduino:avr:uno
+            first: UnoBasicMeasurement
+            second: UnoNonBlockingMeasurement
+          - board: core2
+            core: m5stack:esp32@3.3.10
+            fqbn: m5stack:esp32:m5stack_core2
+            first: M5Core2QuickStart
+            second: M5Core2CloudLogger
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
+
+      - name: Install packaging tool
+        run: python -m pip install --requirement requirements-ci.txt
+
+      - name: Set up Arduino CLI
+        uses: arduino/setup-arduino-cli@v2.0.0
+        with:
+          version: "1.5.1"
+
+      - name: Install board package
+        run: |
+          arduino-cli core update-index --additional-urls https://static-cdn.m5stack.com/resource/arduino/package_m5stack_index.json
+          arduino-cli core install "${{ matrix.core }}" --additional-urls https://static-cdn.m5stack.com/resource/arduino/package_m5stack_index.json
+
+      - name: Install Core2 dependencies
+        if: matrix.board == 'core2'
+        run: arduino-cli lib install M5Unified@0.2.25 ArduinoJson@7.4.3 M5GFX@0.3.0
+
+      - name: Pack and install library ZIP
+        env:
+          ARDUINO_LIBRARY_ENABLE_UNSAFE_INSTALL: "true"
+        run: |
+          pio pkg pack . --output "$RUNNER_TEMP/library.tar.gz"
+          python - <<'PY'
+          import os
+          import tarfile
+          from pathlib import Path
+          from zipfile import ZipFile, ZIP_DEFLATED
+          root = Path(os.environ["RUNNER_TEMP"])
+          with tarfile.open(root / "library.tar.gz") as source:
+              with ZipFile(root / "library.zip", "w", ZIP_DEFLATED) as target:
+                  for member in source.getmembers():
+                      if member.isfile():
+                          target.writestr("MurataSoilSensor/" + member.name,
+                                          source.extractfile(member).read())
+          PY
+          arduino-cli lib install --zip-path "$RUNNER_TEMP/library.zip" --no-deps
+
+      - name: Build installed examples
+        run: |
+          arduino-cli compile --fqbn "${{ matrix.fqbn }}" --warnings all "$ARDUINO_DIRECTORIES_USER/libraries/Murata_Soil_Sensor/examples/${{ matrix.first }}"
+          arduino-cli compile --fqbn "${{ matrix.fqbn }}" --warnings all "$ARDUINO_DIRECTORIES_USER/libraries/Murata_Soil_Sensor/examples/${{ matrix.second }}"
+
+  quality:
+    name: Static and release checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install analysis tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes clang-format cppcheck
+
+      - name: Check formatting
+        run: >-
+          clang-format --dry-run --Werror
+          src/SLT5006.h src/SLT5006.cpp
+          tests/fake_arduino/Arduino.h tests/test_slt5006.cpp
+          examples/UnoBasicMeasurement/UnoBasicMeasurement.ino
+          examples/UnoNonBlockingMeasurement/UnoNonBlockingMeasurement.ino
+          examples/M5Core2QuickStart/M5Core2QuickStart.ino
+          examples/M5Core2CloudLogger/M5Core2CloudLogger.ino
+          examples/M5Core2CloudLogger/CloudRecord.h
+          examples/M5Core2CloudLogger/QueueOrder.h
+          examples/M5Core2CloudLogger/GoogleRootCA.h
+          examples/M5Core2CloudLogger/LoggerConfig.h
+          examples/M5Core2CloudLogger/LoggerConfigFile.h
+          examples/M5Core2CloudLogger/LoggerJson.h
+          examples/M5Core2CloudLogger/LoggerSerialConfig.h
+          examples/M5Core2CloudLogger/LoggerNumberParser.h
+          examples/M5Core2CloudLogger/UploadPolicy.h
+          tests/test_logger_number_parser.cpp tests/test_upload_policy.cpp
+          tests/test_queue_order.cpp
+          tests/fake_logger/Arduino.h tests/fake_logger/Preferences.h
+          tests/fake_logger/FS.h
+          tests/test_logger_config.cpp
+          tests/test_cloud_record.cpp
+          pio/uno_basic/main.cpp pio/uno_nonblocking/main.cpp
+          pio/core2_quick_start/main.cpp pio/core2_cloud_logger/main.cpp
+
+      - name: Run static analysis
+        run: >-
+          cppcheck --enable=warning,style,performance,portability
+          --check-level=exhaustive --error-exitcode=1
+          --inline-suppr --std=c++11 --language=c++
+          -I tests/fake_arduino src tests/test_slt5006.cpp
+          tests/test_logger_number_parser.cpp tests/test_upload_policy.cpp
+          tests/test_queue_order.cpp
+
+      - name: Validate release metadata and links
+        run: python scripts/validate_release.py
+
+      - name: Test Google Apps Script validation logic
+        run: node tests/test_google_apps_script.js
+
+      - name: Test USB configuration sender
+        run: python -m unittest discover -s tests -p test_configure_logger.py -v
+
+      - name: Test Google TLS trust anchors
+        run: python -m unittest discover -s tests -p test_google_root_ca.py -v
+
+      - name: Check whitespace errors
+        run: git diff --check

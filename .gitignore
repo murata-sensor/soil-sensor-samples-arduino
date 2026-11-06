@@ -1,0 +1,14 @@
+.pio/
+.vscode/
+__pycache__/
+.pytest_cache/
+build/
+cmake-build-*/
+*.py[cod]
+*.elf
+*.exe
+*.hex
+*.o
+*.obj
+slt5006-config.json
+slt5006.cfg

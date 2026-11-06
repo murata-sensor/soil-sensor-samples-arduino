@@ -1,0 +1,94 @@
+{
+  "$schema": "https://raw.githubusercontent.com/platformio/platformio-core/develop/platformio/assets/schema/library.json",
+  "name": "Murata Soil Sensor",
+  "version": "0.1.0",
+  "description": "Read measurements from a Murata SLT5006 soil sensor with Arduino or M5Stack.",
+  "keywords": [
+    "sensor",
+    "soil",
+    "UART",
+    "SLT5006",
+    "M5Stack",
+    "M5Core2",
+    "Murata"
+  ],
+  "homepage": "https://github.com/murata-sensor/soil-sensor-samples-arduino",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/murata-sensor/soil-sensor-samples-arduino.git"
+  },
+  "authors": {
+    "name": "Murata Manufacturing Co., Ltd.",
+    "maintainer": true
+  },
+  "license": "BSD-3-Clause",
+  "frameworks": "arduino",
+  "platforms": [
+    "atmelavr",
+    "espressif32"
+  ],
+  "headers": "SLT5006.h",
+  "dependencies": {
+    "m5stack/M5Unified": "^0.2.17",
+    "bblanchon/ArduinoJson": "^7.4.2"
+  },
+  "examples": [
+    {
+      "name": "UnoBasicMeasurement",
+      "base": "examples/UnoBasicMeasurement",
+      "files": [
+        "UnoBasicMeasurement.ino"
+      ]
+    },
+    {
+      "name": "UnoNonBlockingMeasurement",
+      "base": "examples/UnoNonBlockingMeasurement",
+      "files": [
+        "UnoNonBlockingMeasurement.ino"
+      ]
+    },
+    {
+      "name": "M5Core2QuickStart",
+      "base": "examples/M5Core2QuickStart",
+      "files": [
+        "M5Core2QuickStart.ino"
+      ]
+    },
+    {
+      "name": "M5Core2CloudLogger",
+      "base": "examples/M5Core2CloudLogger",
+      "files": [
+        "M5Core2CloudLogger.ino",
+        "CloudRecord.h",
+        "QueueOrder.h",
+        "GoogleRootCA.h",
+        "LoggerConfig.h",
+        "LoggerConfigFile.h",
+        "LoggerJson.h",
+        "LoggerNumberParser.h",
+        "LoggerSerialConfig.h",
+        "UploadPolicy.h"
+      ]
+    }
+  ],
+  "export": {
+    "include": [
+      "src/*",
+      "examples/*/*",
+      "docs/*",
+      "extras/google-apps-script/*",
+      "tests/*",
+      "tests/fake_arduino/*",
+      "tests/fake_logger/*",
+      "scripts/configure_logger.py",
+      "README.md",
+      "README.ja.md",
+      "CONTRIBUTING.md",
+      "SECURITY.md",
+      "LICENSE",
+      "library.json",
+      "library.properties",
+      "keywords.txt"
+    ]
+  }
+}
