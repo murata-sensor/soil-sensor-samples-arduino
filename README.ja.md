@@ -22,7 +22,7 @@
 
 > これはソフトウェアのクイックスタートです。SLT5006のUARTは3.3 Vロジック、Arduino Uno R3は5 Vロジックなので、UARTの両方向にレベル変換を入れてください。電源と電源投入順序は製品資料に従ってください。他のArduinoボードでは、そのボードのUART電圧と入出力仕様に合わせて回路を設計してください。
 
-対象は **SLT5006（TTL UART、独自バイナリプロトコル、1台接続）** です。RS-232CのSLT5005をArduinoのUARTへ直接接続しないでください。公式の[ラインアップ・電気的仕様](https://www.murata.com/ja-jp/products/sensor/soil/design-development/lineup)と[データシートダウンロード](https://www.murata.com/ja-jp/products/sensor/soil/design-development/dl)も確認してください。
+対象は **SLT5006（3.3 VロジックレベルUART、独自バイナリプロトコル、1台接続）** です。RS-232CのSLT5005をArduinoのUARTへ直接接続しないでください。公式の[ラインアップ・電気的仕様](https://www.murata.com/ja-jp/products/sensor/soil/design-development/lineup)と[データシートダウンロード](https://www.murata.com/ja-jp/products/sensor/soil/design-development/dl)も確認してください。
 
 ## 最初に確認する安全事項
 

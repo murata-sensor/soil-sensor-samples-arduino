@@ -2,10 +2,10 @@
 
 English | [日本語](m5stack-wiring.ja.md)
 
-This guide shows how to connect **one SLT5006 TTL-UART sensor** to the red
-**PORT.A** built into an M5Stack Core2 or the blue **PORT.C** on an M5GO
-Bottom2 or equivalent. The SLT5005 uses an RS-232C interface. Even though it
-looks similar, do not connect it with this wiring.
+This guide shows how to connect one SLT5006 with a **3.3 V logic-level UART
+interface** to the red **PORT.A** built into an M5Stack Core2 or the blue
+**PORT.C** on an M5GO Bottom2 or equivalent. The SLT5005 uses an RS-232C
+interface. Even though it looks similar, do not connect it with this wiring.
 
 ## Safety first
 

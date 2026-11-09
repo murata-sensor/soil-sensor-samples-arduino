@@ -3,7 +3,8 @@
 
 #include <Arduino.h>
 
-// Driver for one Murata SLT5006 soil sensor connected through a TTL UART.
+// Driver for one Murata SLT5006 soil sensor connected through a 3.3 V
+// logic-level UART.
 // The caller owns and configures the Stream (SoftwareSerial, Serial1, etc.).
 // A custom Stream must follow current Arduino flush() semantics: wait for
 // pending transmit data (or do nothing when writes are synchronous), never

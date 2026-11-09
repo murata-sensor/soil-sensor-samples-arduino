@@ -28,7 +28,7 @@ stay short. When a second product is added, all examples will switch to
 
 Detailed English guides cover [wiring](docs/wiring.en.md), the [UART protocol](docs/protocol.en.md), and [application integration](docs/integration.en.md). Japanese versions are also available.
 
-This code is for the **SLT5006 TTL UART interface and one connected sensor only**. Do not connect the RS-232C SLT5005 directly to an Arduino UART. See Murata's official [lineup and electrical specifications](https://www.murata.com/en-global/products/sensor/soil/design-development/lineup) and [datasheet download](https://www.murata.com/en-global/products/sensor/soil/design-development/dl).
+This code is for the **SLT5006 3.3 V logic-level UART interface and one connected sensor only**. Do not connect the RS-232C SLT5005 directly to an Arduino UART. See Murata's official [lineup and electrical specifications](https://www.murata.com/en-global/products/sensor/soil/design-development/lineup) and [datasheet download](https://www.murata.com/en-global/products/sensor/soil/design-development/dl).
 
 ## Safety before wiring
 
