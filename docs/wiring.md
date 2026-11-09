@@ -4,67 +4,63 @@
 
 ## 安全に接続する
 
-1. SLT5006の品番を確認します。SLT5005は同じ通信内容でもRS-232C電気レベルのため、このUART配線を使用できません。
-2. センサ、Arduino、外部電源をすべてOFFにします。
-3. 公式の[ラインアップ・電気的仕様](https://www.murata.com/ja-jp/products/sensor/soil/design-development/lineup)と[データシートダウンロード](https://www.murata.com/ja-jp/products/sensor/soil/design-development/dl)から、電源範囲、必要電流、UARTロジック電圧、ケーブル仕様、電源シーケンスを確認します。
-4. 電源線とGNDを接続し、次に信号線を接続します。
-5. 未使用線を1本ずつ絶縁します。
-6. 短絡と極性を再確認し、製品資料と使用回路で規定された順序で給電します。
+1. センサの品番がSLT5006であることを確認します。SLT5005はRS-232Cの電気レベルで通信するため、このUART配線では接続できません。
+2. センサ、Arduino、外部電源をすべてオフにします。
+3. SLT5006の最新の[電気的仕様](https://www.murata.com/ja-jp/products/sensor/soil/design-development/lineup)と[データシート](https://www.murata.com/ja-jp/products/sensor/soil/design-development/dl)で、電源、UART信号、ケーブル、電源投入順序を確認します。
+4. 電源線とGND線を接続してから、信号線を接続します。
+5. 使わない線は1本ずつ絶縁します。
+6. 短絡がないこと、極性が正しいことを確認してから、製品資料と回路設計で決めた順序で給電します。
 
-通電中に線を接続・取り外ししないでください。
+通電中は線を接続したり外したりしないでください。
 
 ## ケーブル
 
-| 色 | SLT5006での機能 | 接続 |
+| 色 | SLT5006側の機能 | 接続先 |
 |---|---|---|
-| RED | Supply | 定格を満たす3.0～6.0 V電源 |
-| BLACK | GND | センサ電源GNDとArduino GND |
-| WHITE | Enable（Highで動作、Lowでstandby） | このサンプルではREDへ |
-| BLUE | Sensor TX | Arduino RXへ（必要ならレベル変換経由） |
-| YELLOW | Sensor RX | Arduino TXから（必要ならレベル変換経由） |
-| GREEN | 内部用 | 接続せず個別に絶縁 |
-| ORANGE | 内部用 | 接続せず個別に絶縁 |
-| GRAY / shield | Shield | 安定通信のためGND接続を推奨 |
+| RED | 電源 | 3.0～6.0 Vの電源 |
+| BLACK | GND | センサ電源のGNDとArduinoのGND |
+| WHITE | Enable（Highで動作、Lowでスタンバイ） | サンプルではREDに接続 |
+| BLUE | センサTX（3.3 Vロジック） | Arduino RXへ（3.3 Vから5 Vにレベル変換） |
+| YELLOW | センサRX（3.3 Vロジック） | Arduino TXから（5 Vから3.3 Vにレベル変換） |
+| GREEN | 内部用 | 接続せず、1本ずつ絶縁 |
+| ORANGE | 内部用 | 接続せず、1本ずつ絶縁 |
+| GRAY / shield | シールド | 通信を安定させるため、GNDへの接続を推奨 |
 
-Unoの`UnoBasicMeasurement`はD10をRX、D11をTXとして使用します。
+`UnoBasicMeasurement`は、Arduino Uno R3のD10をRX、D11をTXとして使います。Uno R3のI/Oは5 Vロジックです。
 
 ```text
-SLT5006 BLUE  (TX) ── level conversion if required ──> Uno D10 (RX)
-SLT5006 YELLOW(RX) <── level conversion if required ── Uno D11 (TX)
+SLT5006 BLUE  (TX, 3.3 V) ── level conversion ──────> Uno D10 (RX, 5 V)
+SLT5006 YELLOW(RX, 3.3 V) <── level conversion ───── Uno D11 (TX, 5 V)
 SLT5006 BLACK (GND) ────────────────────────────────── Uno GND
 sensor supply GND   ────────────────────────────────── Uno GND
 ```
 
-## 電圧について
+## 電源電圧と信号電圧
 
-センサの電源電圧とUART信号電圧は別の仕様です。電源が3.0～6.0 Vの範囲内であっても、UART入力がArduino Unoの5 V信号を許容するとは限りません。公開仕様上の動作電流は最大50 mA（Read/Write cycle）ですが、電源は起動・過渡条件と余裕も含めて選定します。次を個別に確認してください。
+SLT5006のUARTは3.3 Vロジック、Arduino Uno R3のI/Oは5 Vロジックです。電圧が異なるため、UARTの送受信の両方向にレベル変換を入れてください。UnoのTX（D11）からセンサのRX（YELLOW）へは5 Vを3.3 Vに、センサのTX（BLUE）からUnoのRX（D10）へは3.3 Vを5 Vに変換します。
 
-- SLT5006の電源電圧と電源容量
-- SLT5006 UART RX/TXの論理High/Low条件と絶対最大定格
-- Arduino側UARTの信号電圧
-- 使用するレベル変換回路が9600 bpsのpush-pull UARTに対応し、TX/RXそれぞれの信号方向と電圧を満たすこと
-- 一方の電源がOFFでも信号から逆給電しないpowered-off protection、または両電源が安定するまで出力をhigh-impedanceに保つ仕組み
+レベル変換器は、9600 bpsのプッシュプルUART信号に対応したものを選んでください。I2C専用の双方向MOSFETモジュールは使わないでください。Uno R3以外のArduinoボードでは、そのボードのUART電圧と入出力仕様に合わせて変換方向を決めてください。
 
-ArduinoのI/Oピンからセンサへ給電しないでください。Arduino基板上の電源端子を使う場合も、その基板、USB電源、レギュレータ、配線の容量を確認してください。
+センサの電源電圧とUART信号電圧は、別々に規定されています。センサの電源は3.0～6.0 Vの範囲で使い、Read/Write時の最大50 mAに加えて、起動時や過渡時の電流も供給できるものを選んでください。ArduinoのI/Oピンからセンサへ給電しないでください。Arduino基板の電源端子から給電する場合は、基板、USB電源、レギュレータ、配線の電流容量を確認してください。
 
-WHITEをGPIO制御する設計では、Enable端子のVIH/VIL、絶対最大定格、GPIO電圧、片側電源OFF時の注入電流を確認し、必要なドライバ／レベル変換を入れます。Unoの5 V GPIOへ直接接続できるとは仮定しません。本サンプルはstandby制御を行わないため、製品資料で認められた方法としてWHITEをREDへ接続します。
+WHITE（Enable）をGPIOで制御する場合は、Enable端子の入力電圧条件と絶対最大定格を守ってください。Unoの5 V GPIOに直接接続せず、Enable端子の条件に合うドライバやレベル変換器を入れてください。サンプルではスタンバイ制御を使わないため、WHITEをREDに接続しています。
 
-## 書込み・配線・給電の順序
+## 書き込み・配線・給電の順序
 
-`SoftwareSerial`はArduinoの起動時からTXピンをHigh出力にする場合があります。未給電のSLT5006を信号線へ接続したまま、ArduinoだけをUSB給電してスケッチを書き込まないでください。
+Arduinoだけに給電すると、TX線を通じて、電源の入っていないセンサへ電流が流れ込むおそれがあります。センサを接続したまま、ArduinoだけにUSBで給電しないでください。
 
-1. SLT5006を接続していないArduinoへ先にスケッチを書き込みます。
-2. USBを外し、Arduino、センサ、外部電源をすべてOFFにします。
-3. 電源・レベル変換回路を含めて配線します。
-4. powered-off protectionを持つ検証済み回路、または両側の電源が安定するまでUARTをhigh-impedanceに保つ回路を使用します。
-5. 製品資料と回路設計で規定した順序で給電します。
+1. SLT5006を外した状態で、先にArduinoへスケッチを書き込みます。
+2. USBケーブルを外し、Arduino、センサ、外部電源をすべてオフにします。
+3. 電源、共通GND、レベル変換回路を配線します。
+4. どちらか一方の電源がオフでも、信号線から逆給電しない回路を使います。または、両方の電源が安定するまで、UARTの両方向をハイインピーダンスに保ちます。
+5. 製品資料と回路設計で決めた順序で給電します。
 
-このリポジトリは特定の電源、レベル変換器、電源シーケンスを認定しません。評価回路はSLT5006とArduino双方の定格を満たすことを回路設計者が確認してください。
+このリポジトリでは、特定の電源やレベル変換器の動作は確認していません。電源とレベル変換回路は、SLT5006とArduinoの定格に合わせて用意してください。
 
-## 実運用時
+## 運用時の注意
 
-- UnoのD0/D1はUSBシリアルモニタと共用されるため、クイックスタートではD10/D11の`SoftwareSerial`を使います。
-- `SoftwareSerial`は同時に1ポートだけが受信可能で、他の割込み依存機能と干渉する場合があります。
-- ハードウェアUARTを持つボードでは`Serial1`等を優先してください。ピン番号はボード資料で確認します。
-- SLT5006は1台接続専用です。2台以上のTX出力を同じRX線へ接続しないでください。
-- 公式ラインアップ上、SLT5006 UARTへ接続できる最大ケーブル長は3 mです。この範囲内でもノイズ環境、引き回し、シールド、GND電位差を評価してください。
+- UnoのD0/D1はUSBシリアルモニタと共用のため、クイックスタートではD10/D11で`SoftwareSerial`を使います。
+- `SoftwareSerial`は同時に1ポートしか受信できません。割り込みを多用するライブラリと併用すると、干渉することがあります。
+- ハードウェアUARTがあるボードでは、`Serial1`などを優先して使ってください。ピン番号はボードの資料で確認してください。
+- 1つのUARTに接続できるSLT5006は1台です。複数のセンサのTX出力を同じRX線に接続しないでください。
+- SLT5006 UARTの最大ケーブル長は3 mです。3 m以内でも、ノイズ、配線経路、シールド、GND間の電位差は通信に影響します。

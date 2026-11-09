@@ -78,6 +78,10 @@ jobs:
   arduino-ide-build:
     name: Arduino IDE ZIP (${{ matrix.board }})
     runs-on: ubuntu-latest
+    env:
+      ARDUINO_DIRECTORIES_DATA: ${{ runner.temp }}/arduino-data
+      ARDUINO_DIRECTORIES_DOWNLOADS: ${{ runner.temp }}/arduino-downloads
+      ARDUINO_DIRECTORIES_USER: ${{ runner.temp }}/arduino-user
     strategy:
       fail-fast: false
       matrix:
@@ -94,12 +98,6 @@ jobs:
             second: M5Core2CloudLogger
     steps:
       - uses: actions/checkout@v7
-
-      - name: Set up Arduino CLI directories
-        run: |
-          echo "ARDUINO_DIRECTORIES_DATA=$RUNNER_TEMP/arduino-data" >> "$GITHUB_ENV"
-          echo "ARDUINO_DIRECTORIES_DOWNLOADS=$RUNNER_TEMP/arduino-downloads" >> "$GITHUB_ENV"
-          echo "ARDUINO_DIRECTORIES_USER=$RUNNER_TEMP/arduino-user" >> "$GITHUB_ENV"
 
       - name: Set up Python
         uses: actions/setup-python@v7

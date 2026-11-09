@@ -2,33 +2,34 @@
 
 English | [日本語](gas-setup.ja.md)
 
-`M5Core2CloudLogger` can keep each measurement on microSD and upload queued rows
-over HTTPS to Google Apps Script (GAS). The included receiver expands named JSON
-fields into Google Sheets, locks concurrent writes, and ignores a row ID that
-was already stored after a retry.
-After receipt, complete data rows (excluding the header) are sorted by `Date`
-ascending, including backlog and error rows. `setupSheet` also sorts existing
-rows. For unsynchronized records with empty `ts`, Date is the receipt time;
-their original measurement order cannot be reconstructed.
+`M5Core2CloudLogger` saves each measurement to microSD and can upload the queued
+rows over HTTPS to Google Apps Script (GAS). The included receiver writes each
+measurement as one row in Google Sheets, with the named JSON fields mapped to
+columns. It serializes concurrent requests with a script lock and skips any row
+whose ID is already stored, so a retry does not add duplicate rows.
 
-The web app normally allows anonymous network access and authenticates writes
-with a shared token in the JSON body. Anyone who obtains both URL and token can
-write data. Never commit or publish the deployment URL, token, Wi-Fi password,
-private configuration JSON, screenshots containing them, or diagnostic logs that
-contain them.
+After receiving data, the receiver sorts all rows below the header by `Date` in
+ascending order, including resent rows from the queue and rows with errors.
+Running `setupSheet` also sorts existing rows. If a measurement was taken while
+the clock was not synchronized, its `ts` is empty and `Date` holds the receipt
+time, so the original measurement order of such rows cannot be restored.
+
+The web app normally accepts anonymous requests and authenticates writes with a
+shared token in the JSON body. The URL alone does not allow writes, but anyone
+who has both the URL and the token can write data. Never commit or publish the
+deployment URL, token, Wi-Fi password, or private configuration JSON. This
+includes screenshots, diagnostic logs, and chat messages that contain them.
 
 ## Deploy the receiver
 
 1. Create and open the destination Google spreadsheet.
 2. Select **Extensions > Apps Script**.
-3. Replace the default `Code.gs` contents with
-   [`extras/google-apps-script/Code.gs`](../extras/google-apps-script/Code.gs),
-   then save it. The repository's `appsscript.json` is only needed for source
-   management tools such as `clasp`.
-4. Open **Project Settings > Script properties** and add:
-
-   Generate a hard-to-guess token with Windows PowerShell (32 bytes / 64
-   hexadecimal characters):
+3. Replace the contents of the default `Code.gs` with
+   [`extras/google-apps-script/Code.gs`](../extras/google-apps-script/Code.gs)
+   and save. You need the repository's `appsscript.json` only if you manage the
+   source with a tool such as `clasp`.
+4. Generate a hard-to-guess token. In Windows PowerShell, these commands
+   generate a 32-byte token (64 hexadecimal characters):
 
    ```powershell
    $bytes = New-Object byte[] 32
@@ -43,56 +44,70 @@ contain them.
    }
    ```
 
-   Save the generated value in a password manager or another secure backup, then
-   use the exact same value for GAS `INGEST_TOKEN` and the Core2 `gas_token`.
+   Store the value in a password manager or another secure place. Use exactly
+   the same value for the GAS `INGEST_TOKEN` and the Core2 `gas_token`.
+
+   Open **Project Settings > Script properties** and add these properties:
 
    | Property | Required | Value |
    |---|---|---|
-   | `INGEST_TOKEN` | Yes | A private random token, preferably at least 32 bytes |
-   | `TARGET_SHEET` | No | Destination tab; default `soil_sensor` |
-   | `TIME_ZONE` | No | IANA display zone; default `Asia/Tokyo` |
-   | `SPREADSHEET_ID` | No | Only for a standalone rather than bound script |
+   | `INGEST_TOKEN` | Yes | Private random token, preferably 32 bytes or longer |
+   | `TARGET_SHEET` | No | Destination sheet (tab) name. Default: `soil_sensor` |
+   | `TIME_ZONE` | No | IANA time zone for displayed dates. Default: `Asia/Tokyo` |
+   | `SPREADSHEET_ID` | No | Spreadsheet ID. Set it only for a standalone script, not for a bound script |
 
-5. Select `setupSheet` in the function list and run it once. Approve spreadsheet
-   access, then verify that the destination tab and header appeared.
-6. Select **Deploy > New deployment > Web app**. Execute as yourself and choose
-   the access setting that permits the anonymous Core2 to call it (normally
-   **Anyone**). A Workspace administrator may restrict this option.
+5. Select `setupSheet` in the function list and run it once. Approve
+   spreadsheet access when prompted, then check that the destination tab and
+   its header row were created.
+6. Select **Deploy > New deployment > Web app**. Execute as yourself, and
+   choose the access setting that lets the Core2 call the web app anonymously
+   (normally **Anyone**). If you cannot select it with a Google Workspace
+   account, check your administrator's policy.
 7. Copy the final HTTPS URL ending in `/exec`.
 
-When changing the GAS code, edit the existing deployment and select **New
-version**. Creating an unrelated deployment changes the URL.
+After you change the GAS code, select **Deploy > Manage deployments**, edit the
+existing deployment, and select **New version**. A separate new deployment gets
+a different URL, and you then have to change the Core2 setting as well.
 
-Opening `/exec` in a browser returns a non-secret health response. It proves
-reachability, not sheet-write authorization:
+Opening the `/exec` URL in a browser returns the following health response. It
+needs no token and contains no secrets:
 
 ```json
 {"ok":true,"service":"slt5006-google-sheets-receiver","schemaVersion":2}
 ```
 
+This response only shows that the web app is reachable. It does not test the
+token or writing to the sheet.
+
 ## Configure the Core2
 
-Connect USB, close Serial Monitor, and provision internal NVS from the PC:
+Connect the Core2 to the PC by USB, close Serial Monitor, and run the following
+commands on the PC. The tool saves the Wi-Fi and cloud settings to the Core2's
+internal NVS:
 
 ```powershell
 py -m pip install pyserial
 py .\scripts\configure_logger.py --port COM4
 ```
 
-Set `gas_token` to the exact `INGEST_TOKEN` value and use only an HTTPS `/exec`
-URL in the prompts. Reset the Core2 while the tool is waiting if asleep or busy.
-Successful saving restarts it automatically. microSD stores logs and the
-retry queue and can supply `/slt5006.cfg` when NVS is unconfigured.
-See [logger setup](logger-setup.md) for JSON/SD input, defaults, limits
-and NVS persistence. NVS is not encrypted by this sample; restrict device access.
+At the prompts, set `gas_token` to the same value as `INGEST_TOKEN`, and always
+use the HTTPS URL ending in `/exec` for `gas_url`. If the Core2 is asleep or
+busy while the tool is waiting, reset the Core2. After the settings are saved,
+the Core2 restarts automatically. When NVS is not configured, the logger can
+read its settings from `/slt5006.cfg` on microSD. The microSD card also stores
+the logs and the retry queue. See [logger setup](logger-setup.md) for USB
+provisioning details, JSON and SD input, defaults and limits, NVS persistence,
+and offline behavior.
 
-Start the wired device, take a measurement, and use touch button C to request an
-upload. A successful final response has `ok:true`; HTTP 2xx by itself is not
-enough. Pending files remain queued after any ambiguous or failed response.
+With the sensor wired, start the Core2, take a measurement, and touch button C
+to request an upload. The logger counts an upload as successful only when the
+final response contains `ok:true`. HTTP 2xx alone is not enough. If an upload
+fails or its result is unclear, the pending files stay in the queue.
 
-## Request contract
+## Request format
 
-The serial number and record ID below are fictional examples.
+Normally, send rows in the multi-row format below. The serial number and record
+ID are fictional examples.
 
 ```json
 {
@@ -117,48 +132,61 @@ The serial number and record ID below are fictional examples.
 }
 ```
 
-`token` and `serialNumber` are required. Send 1-100 rows. Normally `ts` is an
-ISO 8601 value with `Z` or an offset. A provided `rows` must be an array;
-the compatible single-row form is accepted only when `rows` is omitted.
-Identifiers must be strings or finite numbers, not booleans or objects.
-If `ts` is empty, GAS uses server receipt
-time and `id` becomes required; the logger marks that row
-`time_not_synchronized`. If `id` is otherwise absent, the receiver derives one
-from serial number and normalized timestamp. Retried records retain the ID.
-Calendar dates are validated, including leap years. Fractional seconds from
-Python and .NET are accepted; derived IDs use UTC millisecond precision.
-Provide a unique explicit ID when measurements could share that precision.
+`token` and `serialNumber` are required. A request can contain 1 to 100 rows.
+If you include `rows`, it must be an array. The single-row form, kept for
+compatibility, is accepted only when `rows` is omitted. `serialNumber` and `id`
+must be strings or finite numbers, not booleans or objects.
 
-All measurement fields are optional finite numbers or numeric strings.
-Omitted, null, and empty values leave cells empty; whitespace-only numeric
-strings are rejected rather than converted to zero. `battery_v` is the sensor-
-reported supply; `core2_battery_v` is the Core2 battery. Omit unavailable values.
-In particular, omit `ec_pore_coco_dsm` for unsupported or unidentified sensor
-firmware rather than reporting a false zero. Sheet columns are independent of
-JSON key order:
+`ts` is normally an ISO 8601 timestamp with `Z` or a UTC offset. The receiver
+rejects dates that do not exist, taking leap years into account, and accepts
+fractional seconds from Python and .NET. If `ts` is empty, GAS uses the server
+receipt time and `id` is required. The logger marks such a row
+`time_not_synchronized`.
+
+If `id` is omitted, the receiver derives it from the serial number and the
+normalized timestamp at UTC millisecond precision. If two measurements from the
+same sensor can have the same timestamp at that precision, give each a unique
+`id`. The logger keeps a row's ID when it retries the upload.
+
+All measurement fields are optional. Each takes a finite number or a numeric
+string. Omitted, null, and empty values leave the cell empty. A string that
+contains only whitespace is rejected, not converted to zero. `battery_v` is the
+supply voltage reported by the sensor, and `core2_battery_v` is the Core2
+battery voltage. Omit any value that is not available. In particular, if the
+sensor firmware does not support `ec_pore_coco_dsm` or cannot be identified,
+omit the field instead of sending a false zero.
+
+The sheet column order does not depend on the JSON key order:
 
 ```text
 Date, SerialNumber, Firmware, Battery(V), Temperature(degC), VWC(%), VWC rock(%), VWC coco(%), EC bulk(dS/m), EC pore(dS/m), EC pore coco(dS/m), Id, Core2 Battery(V), WiFi RSSI(dBm), Error
 ```
 
-To recreate a disposable test sheet with this layout, stop Core2, delete only
-the receiver tab (default `soil_sensor`), and run `setupSheet` with the updated
-code. Do not delete the whole spreadsheet or its bound script project. If this
-is the last tab, add a temporary empty tab first. Existing data will be lost.
-Update the existing web-app deployment to a new version before restarting Core2.
-Past rows still queued on SD will be resent.
+To recreate a test sheet after the column layout changes, stop the Core2,
+delete only the receiver tab (default `soil_sensor`), and run `setupSheet` with
+the updated code. Do not delete the whole spreadsheet or its bound Apps Script
+project. If the receiver tab is the only tab, add a temporary empty tab first
+so that you can delete it. The data in the deleted tab is lost. Update the
+existing web-app deployment to a new version before you restart the Core2. Rows
+still queued on the SD card are then resent.
 
-The receiver validates the entire request before writing, acquires a script
-lock, filters existing IDs, and writes the remaining rows in one operation.
+The receiver validates every row in a request before it writes anything. It
+then acquires a script lock, skips IDs that are already in the sheet, and writes
+the remaining rows in one operation. If any row is invalid, the receiver writes
+none of the rows in that request. A successful response looks like this:
 
 ```json
 {"ok":true,"received":10,"written":8,"duplicates":2}
 ```
 
-Errors have `ok:false`. Apps Script may still transport such a JSON error with
-HTTP 200, so clients must inspect the final body after redirects.
+An error response has `ok:false`. Apps Script can return such an error with
+HTTP 200, so a client must check the JSON body of the final response after
+redirects.
 
-## Optional receiver-only test (PowerShell)
+## Test only the receiver from PowerShell (optional)
+
+This script prompts for the token, so the token is not saved in the command
+history.
 
 ```powershell
 $url = 'https://script.google.com/macros/s/REPLACE_WITH_DEPLOYMENT_ID/exec'
@@ -180,22 +208,28 @@ $body = @{
 Invoke-RestMethod -Method Post -Uri $url -ContentType 'application/json' -Body $body
 ```
 
-Expect `written=1`. Sending the identical `$body` again should return
-`written=0` and `duplicates=1`. Delete the `TEST001` test row afterward.
+A successful request returns `ok=true` and `written=1`. If you send the same
+`$body` again and get `written=0` and `duplicates=1`, duplicate detection works.
+Afterward, delete the `TEST001` test row from the spreadsheet manually.
 
 ## Operational safety
 
-- Restrict physical access to the device and config card; neither NVS nor SD
-  credentials are encrypted by this sample. Rotate both Script Property and
-  all device tokens after exposure.
-- Keep TLS certificate validation enabled. A port must safely follow the GAS
-  response redirect and parse the final JSON.
-- Limit spreadsheet sharing, enable multi-factor authentication, and review GAS
-  execution history.
-- Shared-token ingestion is suitable for evaluation and small deployments. Use
-  an API with per-device credentials, revocation, and auditing when those are
-  requirements.
+- This sample encrypts neither NVS nor the credentials on the SD card. Restrict
+  physical access to the device and the configuration card. If a token is
+  exposed, replace both the `INGEST_TOKEN` script property and the `gas_token`
+  on every device.
+- Keep TLS certificate validation enabled. If you port the client to another
+  platform, follow the GAS redirect safely, parse the final JSON, and check
+  `ok`.
+- Limit spreadsheet sharing, especially edit access, and enable multi-factor
+  authentication on the Google account. Review these settings and the Apps
+  Script execution history regularly.
+- The shared-token method is intended for evaluation and small deployments. If
+  you need per-user or per-device credentials, revocation, or auditing, or if
+  the data is confidential, move to an API platform with authentication.
 
-For errors, verify exact token equality, `/exec` URL, time synchronization,
-`setupSheet`, the target header, and that code changes were deployed as a new
-version. Do not paste tokens or Wi-Fi passwords into support logs.
+If an upload fails, check that the tokens match exactly, that the URL ends in
+`/exec`, that the clock is synchronized, that `setupSheet` has been run, that
+the target sheet has the expected header, and that code changes were deployed
+as a new version. Do not paste tokens or Wi-Fi passwords into logs that you
+share for support.

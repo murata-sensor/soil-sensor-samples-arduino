@@ -4,8 +4,8 @@ English | [日本語](integration.md)
 
 ## Select a UART
 
-`SLT5006` accepts an Arduino `Stream&`, including `SoftwareSerial`, `Serial1`,
-and compatible UART classes.
+`SLT5006` takes an Arduino `Stream&`, so you can pass `SoftwareSerial`,
+`Serial1`, or another compatible UART class.
 
 ```cpp
 SLT5006 sensor(Serial1);
@@ -15,19 +15,31 @@ void setup() {
 }
 ```
 
-Prefer a hardware UART in deployed systems. `SoftwareSerial` has board-specific
-RX pins, permits only one listening receiver, can conflict with interrupt-heavy
-features, and can lose bytes in a heavily loaded loop. Do not access one UART
-concurrently from multiple tasks or interrupt contexts. Connect one sensor only.
+Prefer a hardware UART in deployed systems. `SoftwareSerial` is convenient for
+quick tests, but it has these limits:
 
-A custom `Stream` must use current Arduino `flush()` semantics: wait for pending
-transmit data, or return immediately for synchronous writes. It must not clear
-received bytes. Its `available()` and `read()` implementation must also allow a
-timeout to progress when a byte disappears between those two calls.
+- Only one `SoftwareSerial` instance can listen at a time.
+- The usable RX pins depend on the board.
+- It restricts interrupts while it sends or receives. This can disturb Servo,
+  timer-based code, other software UARTs, and similar features.
+- It can drop received bytes when the main loop is heavily loaded. Evaluate it
+  under that load.
 
-Plan for partial power loss: isolate the signal with powered-off protection or
-make the Arduino TX high impedance while the sensor is unpowered. Include
-restart, maintenance, connector failure, and supply failure in the design.
+Do not access one UART from multiple tasks or interrupt contexts at the same
+time. Connect only one sensor to each UART.
+
+If you use a custom `Stream`, implement current Arduino `flush()` semantics:
+wait until pending transmit data has been sent, or return immediately if writes
+are synchronous. `flush()` must not discard received bytes. If another context
+reads a byte between `available()` and `read()`, so that `read()` returns `-1`,
+the timeout must still advance.
+
+Plan for the case where only one side loses power. If the Arduino keeps driving
+TX after the sensor loses power, the signal line can back-power the sensor.
+While the sensor is unpowered, make the Arduino TX high impedance, isolate the
+signal with a converter that has powered-off protection, or use an equivalent
+measure that follows the product documentation. Cover restart, maintenance,
+connector failure, and supply failure in the design.
 
 ## Blocking and cooperative APIs
 
@@ -42,11 +54,13 @@ if (sensor.readMeasurement(value)) {
 }
 ```
 
-`readMeasurement()` starts a conversion, waits at least 300 ms, polls no more
-often than every 200 ms, and stops starting new polls after the default 30-second
-conversion deadline.
+`readMeasurement()` starts a conversion and waits at least 300 ms after the start
+ACK. It then polls the state no more often than every 200 ms. After the default
+30-second conversion deadline, counted from the start ACK, it starts no new
+polls. If the application must keep doing other work during the wait, use the
+cooperative API.
 
-For cooperative conversion waiting, use this state sequence:
+The cooperative API uses this state sequence:
 
 ```text
 IDLE --startMeasurement()--> MEASURING
@@ -55,18 +69,24 @@ MEASURING --measurementComplete(true)--> READY
 READY --readMeasurementData()--> IDLE
 ```
 
-Before 300 ms, `measurementComplete()` returns `complete=false` without a UART
-request. Calls sooner than the configured poll interval also return without a
-request. See [`UnoCooperativePolling`](../examples/UnoCooperativePolling/UnoCooperativePolling.ino).
+For the first 300 ms after the start ACK, `measurementComplete()` returns
+`complete=false` without sending a UART request. After that, a call made before
+the configured poll interval has passed since the previous poll also returns
+without a request. You can therefore call it repeatedly from the main loop. See
+[`UnoCooperativePolling`](../examples/UnoCooperativePolling/UnoCooperativePolling.ino)
+for a complete example.
 
-The default 30-second deadline is a measurement timeout limit, not the normal
-conversion duration. This avoids blocking for the entire conversion; it does not
-make UART I/O fully asynchronous. Start and each due status poll can block for
-one response timeout.
-The final 18-byte data operation uses one transaction and can block for about
-300 ms with defaults. Budget both waits if a due status poll and data read run
-back-to-back. Use a dedicated task or asynchronous UART state machine
-for stricter latency.
+The default 30-second deadline is an upper limit for the measurement wait, not
+the normal conversion time. The cooperative API splits up the conversion wait,
+but not the UART response waits. `startMeasurement()`, a `measurementComplete()`
+call that sends a status poll, and the final 18-byte `readMeasurementData()`
+each perform one UART transaction. The caller is blocked while the driver waits
+for the response, for up to one response timeout (about 300 ms with defaults).
+If a status poll and the data read run back-to-back, budget for both waits. For
+tighter latency, move UART communication into your own asynchronous state
+machine, an RTOS task, or a dedicated communication routine.
+
+Calling `readMeasurementData()` out of order fails with `MEASUREMENT_NOT_READY`.
 
 ## Timeouts and recovery
 
@@ -76,24 +96,36 @@ sensor.setPollInterval(200);
 sensor.setMeasurementTimeout(30000);
 ```
 
-Shorter values can reject normal delays; longer values delay fault detection.
-Validate changes with the actual board, UART, wiring, sensor, and temperature
-range. Timeout arithmetic uses unsigned subtraction and survives `millis()`
-rollover.
+These defaults are the reference values for this sample. Shorter values can
+treat normal delays as errors. Longer values delay fault detection. If you
+change them, evaluate the new values with the actual board, UART, wiring,
+sensor, and temperature range. Timeout calculations use unsigned subtraction,
+so they keep working when `millis()` rolls over.
 
-The measurement timeout is a conversion-wait deadline, not a strict API
-wall-clock limit. A UART response wait begun before that deadline and a blocking
-poll delay can extend the call beyond it.
+The measurement timeout is the conversion-wait deadline: after the start ACK, a
+new status poll can begin only before this deadline. It is not a limit on the
+total time of an API call. A UART response wait or a blocking poll-interval
+delay that begins before the deadline is not cut off at the deadline, so the
+call can run past it. If your system has a strict processing deadline, add
+margin for each response timeout or manage the deadline at a higher level.
 
-On failure, record `lastError()`, `lastDeviceErrorCode()` when applicable, and a
-timestamp. Do not retry commands rapidly in one cycle. Retry from
-`startMeasurement()` in a later cycle; investigate persistent errors as power,
-ground, UART-level, wiring, or noise problems. The driver drains stale input
-before a request to resynchronize after delayed errors or partial frames.
+The APIs that communicate with the sensor return `true` on success and `false`
+on failure. On failure, record
+`lastError()`, `lastDeviceErrorCode()` for a device error, and a timestamp. Do
+not resend requests rapidly within one cycle. Discard the measurement state and
+retry from `startMeasurement()` in a later cycle. If errors persist, check the
+power supply, ground, UART signal levels, wiring, and noise. Turn off the power
+before you change any wiring.
+
+If the sensor's internal measurement fails after the start ACK, a separate error
+frame can arrive later. Treat a following device error, format error, or
+measurement timeout as a failed measurement. Before each request, the driver
+discards stale input, so it resynchronizes after a delayed error frame or a
+partial frame.
 
 ## Firmware capability and measurement selection
 
-Read firmware at startup and retain the capability result:
+Read the sensor information at startup and keep the capability result:
 
 ```cpp
 SLT5006::SensorInfo info;
@@ -103,32 +135,47 @@ if (sensor.readInfo(info)) {
 }
 ```
 
-Firmware 1.6.3 does not support `ecPoreCocoDsM`; 1.7.5 and 1.7.6 do. Earlier
-firmware still returns a readable zero in word 9, but that zero is not a
-supported measurement. If firmware cannot be identified or does not support
-the field, do not display, store, or upload it.
+Firmware 1.6.3 does not support `ecPoreCocoDsM`. Firmware 1.7.5 and 1.7.6
+support it. Unsupported firmware still returns word 9, but its value is zero
+and is not a supported measurement. If the firmware does not support the field
+or cannot be identified, do not display, store, or upload the value. Evaluate
+the other measurements against the product specifications.
 
-Treat communication success separately from measurement validity:
+Judge communication success and measurement validity separately:
 
-1. Confirm firmware, serial, and CRC-valid frames.
-2. Select one VWC conversion for the actual medium.
-3. Distinguish bulk EC from pore-water EC.
-4. Check firmware and product conditions before using coco-peat pore EC.
-5. Follow Murata's [recommended installation](https://www.murata.com/en-global/products/sensor/soil/design-development/institution)
-   and evaluate repeatability in a known medium.
-6. Define saturation and out-of-range handling in the application. The driver
-   does not clamp values.
+1. Confirm the communication path: read the firmware version and serial number,
+   and check that the responses have valid CRCs.
+2. Select the one VWC field that matches the actual medium: `vwcPercent` for
+   general soil, `vwcRockPercent` for rock wool, or `vwcCocoPercent` for coco
+   peat.
+3. Distinguish bulk EC from pore-water EC according to the quantity you need.
+4. Before using coco peat pore EC (`ecPoreCocoDsM`), check both firmware support
+   and the application conditions in the product documentation.
+5. Install the sensor following Murata's [recommended installation](https://www.murata.com/en-global/products/sensor/soil/design-development/institution)
+   and check the response and repeatability in a known medium and installation.
+6. Define how the application handles out-of-range values, saturation, and
+   abnormal values. The driver does not clamp values to the specification range.
 
-Do not average the medium-specific conversions as if they were independent
-simultaneous measurements.
+Do not store or average the medium-specific conversions as if they were
+independent simultaneous measurements.
 
 ## Memory and porting checks
 
-The driver uses no dynamic `String`, heap allocation, or exceptions. It uses a
-fixed 31-byte maximum response buffer and returns converted `float` values.
-Arduino Uno implements `double` with the same 32-bit precision as `float`.
+The driver does not use dynamic `String` objects, heap allocation, or
+exceptions. It receives responses into a fixed 31-byte buffer, sized for the
+longest response, and returns converted `float` values. Units are dS/m for EC,
+percent for VWC, degC for temperature, and V for voltage. We recommend including
+the unit in stored column names. On the Arduino Uno, `double` has the same
+32-bit precision as `float`. If you need higher precision, evaluate the
+requirement together with the target board and data format.
 
-When porting the protocol, test CRC value and high-byte-first wire order,
-fragmented responses, four-byte error frames, every response-header and echo
-check, signed 12-bit temperature, little-endian values, the 300 ms settle time,
-the 30-second deadline, and `millis()` rollover. See the [protocol guide](protocol.en.md).
+When you port the protocol, read the [protocol guide](protocol.en.md) and test
+these points in particular:
+
+- CRC value and high-byte-first wire order
+- Fragmented responses
+- Four-byte error frames
+- Every response-header and echo check
+- Signed 12-bit temperature and little-endian values
+- The 300 ms settle time before the first status request
+- The 30-second deadline and `millis()` rollover

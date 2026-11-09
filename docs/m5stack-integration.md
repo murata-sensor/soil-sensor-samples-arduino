@@ -2,8 +2,9 @@
 
 English | [日本語](m5stack-integration.ja.md)
 
-Use `M5Core2QuickStart` for first verification and `M5Core2CloudLogger` to evaluate
-storage and upload. In a product, preserve this separation:
+Use `M5Core2QuickStart` for the first functional check and `M5Core2CloudLogger`
+to evaluate storage and upload. In a product, keep UI, storage, communication,
+and authentication separate, with clear boundaries:
 
 ```text
 SLT5006 UART driver -> Measurement -> display / local CSV / upload queue -> GAS
@@ -11,9 +12,10 @@ SLT5006 UART driver -> Measurement -> display / local CSV / upload queue -> GAS
 
 ## Arduino compatibility
 
-The M5Core2 driver retains the Arduino sample's `Stream`-based API and data
-types. Pass a configured ESP32 hardware UART. This example uses built-in
-PORT.A (RX=32, TX=33); use RX=13, TX=14 for PORT.C on a compatible bottom:
+The M5Core2 driver uses the same `Stream`-based API and data types as the
+Arduino version. Configure ESP32 hardware UART2 and pass it to the driver. This
+example uses PORT.A on the Core2 (RX=32, TX=33). For PORT.C on a compatible
+Bottom, use RX=13, TX=14:
 
 ```cpp
 HardwareSerial sensorSerial(2);
@@ -24,86 +26,120 @@ void setup() {
 }
 ```
 
-Use `readMeasurement()` for a simple blocking operation. For a responsive UI,
-call `startMeasurement()`, repeatedly call `measurementComplete()`, then call
-`readMeasurementData()`. This cooperates during conversion but individual UART
-transactions can still block for their response timeout. Give one task sole
-ownership of the UART.
+Use `readMeasurement()` for a simple blocking measurement. To keep the UI and
+network running during the conversion, call `startMeasurement()`, call
+`measurementComplete()` repeatedly, and then call `readMeasurementData()`. These
+calls split up the conversion wait, but each UART transaction still blocks the
+caller while it waits for the response, for up to the response timeout.
 
-Keep the Arduino/Python-compatible field names and units at storage/API
-boundaries: `battery_v` is the sensor-reported supply, `core2_battery_v` is the
-Core2 battery, temperature is degC, VWC is percent, and EC is dS/m. Select one
-VWC conversion appropriate to the medium. Communication success does not prove
-measurement validity, and the driver does not clamp values to specification.
+At storage and API boundaries, keep the field names and units compatible with
+the Arduino and Python versions: `battery_v` is the supply voltage reported by
+the sensor, `core2_battery_v` is the Core2 battery voltage, temperature is in
+degC, VWC is in percent, and EC is in dS/m. Select the one VWC conversion that
+matches the medium. Judge measurement validity separately from communication
+success. Define the installation method, the specification range, and the
+handling of saturation and abnormal values as system requirements. The driver
+does not clamp values to the specification range.
 
-Read firmware and serial at startup. Firmware older than 1.7.5 returns a
-readable zero for word 9, but that zero is not a supported coconut pore EC
-measurement. Omit the field when firmware is older than 1.7.5 or unidentified. See
-the [protocol reference](m5stack-protocol.md) for frames, conversions, and error codes.
+Read the firmware version and serial number at startup. Firmware older than
+1.7.5 still returns word 9, but its value is zero and is not a supported coco
+peat pore EC measurement. Omit the field when the firmware is older than 1.7.5
+or cannot be identified. See the [protocol reference](m5stack-protocol.md) for
+frames, conversions, and error codes.
 
 ## Errors, deadlines, and ownership
 
-Defaults are a 300-ms UART response timeout, 200-ms state-poll interval, and
-30-second conversion deadline, with at least 300 ms before the first poll. Test
-any change on the real sensor and wiring. Log error class, device code, time,
-and consecutive count; clear stale input, wait, and retry from a new cycle
-instead of flooding the current request. Apply bounded backoff.
+The defaults are a 300-ms UART response timeout, a 200-ms state-poll interval,
+and a 30-second conversion deadline. The first poll comes at least 300 ms after
+the start ACK. Shorter values can flag normal delays as faults, and longer values
+delay detection of a broken wire. If you change them, test with the actual
+sensor, wiring, temperature, and processing load.
 
-Use unsigned elapsed-time arithmetic for `millis()` wraparound. A hard
-application deadline must also budget the start, state, and final UART response
-timeouts. Never access the same UART from two tasks or interrupt contexts.
+On an error, log the error class, device error code, time, and number of
+consecutive failures. Do not flood the sensor with the same request. Clear stale
+input, wait, and retry in a new measurement cycle. After CRC or format errors,
+check the power supply, GND, logic levels, noise, and cable length. Apply
+exponential backoff with an upper limit so that repeated failures do not cause a
+watchdog reset loop. Turn off all power before changing the wiring.
+
+Use unsigned subtraction to compute elapsed `millis()` time so that wraparound
+is handled. For a hard application deadline, also budget the UART response
+timeouts of the start, state-poll, and final read transactions. Give one task
+sole ownership of the UART. Never access it from two tasks or interrupt
+contexts.
 
 ## Store before upload
 
 For every measurement:
 
-1. Build a named record with an ID that remains stable across retries.
-2. Persist it to a queue with temp-file plus rename.
-3. Append and flush/close the same record in local CSV.
-4. POST it and require both final HTTP 2xx and JSON `ok:true` after redirects.
+1. Build a record with named fields and a unique `id` that stays the same across
+   retries.
+2. Write the record to a temporary file, then rename it into the queue.
+3. Append the same record to the local CSV file, then flush and close the file.
+4. POST the record. After redirects, require both HTTP 2xx and JSON `ok:true`
+   in the final response.
 5. Delete the queued record only after that confirmation.
 
-Queue and CSV writes are separately checked; the queue has priority because it
-preserves delivery. Header and row writes must report the complete byte count,
-not merely a nonzero write. Queued JSON records are limited to 2048 bytes and
-existing IDs are never overwritten. Temp-file plus rename does not by itself
-guarantee power-loss durability on every card. Plan for reset during each step, full or removed media,
-card wear, retention, backup, malformed CSV input, and queue limits. Use the
-same `id` to correlate
-local and cloud data. Combine persistent device identity/counter with time;
-timestamp alone can collide or move after clock correction.
+Check the queue write and the CSV write separately. The queue takes priority
+because it preserves cloud delivery. A header or row write succeeds only when it
+writes the complete byte count, not just a nonzero count. Queued JSON records
+are limited to 2048 bytes, and an existing ID is never overwritten. Even with a
+temporary file and rename, power loss can still lose or corrupt data on some
+cards. Plan for a reset during each step, and detect and isolate incomplete
+files at startup. Also plan for full or removed media, card wear, retention,
+backup, an unsynchronized clock, escaping of external input (including CSV
+injection), and queue limits.
 
-Use ISO 8601 with an offset or `Z`. The sample stores empty `ts` plus
-`error=time_not_synchronized` before NTP is valid. The included GAS then uses
-server receipt time for the sheet Date, which is not measurement time. Products
-that need precise chronology should add retained RTC, synchronization quality,
-monotonic offsets, and explicit clock-jump handling.
+Use the same `id` to match local and cloud data. Build it from the time plus a
+persistent device identity or counter. A timestamp alone can collide, or can
+change after clock correction.
+
+Write `ts` in ISO 8601 with a UTC offset or `Z`. Do not record the time before
+NTP synchronization as a valid date and time. Until NTP is synchronized, the
+sample logger stores an empty `ts`, `error=time_not_synchronized`, and a stable
+`id`. Only in that case does the included GAS use the server receipt time for
+the sheet Date. That value is not the measurement time. Products that need
+accurate chronology should add RTC time retention, a synchronization-quality
+flag, boot time with monotonic offsets, and a policy for clock jumps after
+resynchronization.
 
 ## Network, credentials, and power
 
-- Accept HTTPS only and validate certificate plus hostname.
-- Follow GAS redirects safely and validate the final JSON schema.
-- Keep Wi-Fi passwords and tokens out of source, UI, logs, and crash dumps.
-- Bound timeouts, retry count, backoff, and queue size; document token rotation.
-- For fleets, replace one shared token with per-device credentials, revocation,
-  rate limits, and audit logging.
+- Accept HTTPS URLs only, and validate the certificate and hostname.
+- Follow GAS redirects safely to the final response, and validate its JSON
+  schema and `ok:true`.
+- Keep Wi-Fi passwords and tokens out of source code, the UI, logs, and crash
+  dumps.
+- Set limits on timeouts, retry count, backoff, and queue size. Document how to
+  replace the token if it leaks.
+- For a fleet of devices, replace the shared token with per-device credentials,
+  revocation, rate limits, and audit logging.
 
-Deep sleep and sensor power control require a circuit-level review. Prevent
-UART back-powering when either device is off, validate Enable ratings and boot
-pin state, wait for power stabilization, and never sleep during an SD write or
-HTTPS transaction.
+Deep sleep and sensor power control need a circuit review, not only software
+changes. The circuit must prevent back-powering through the UART when either
+device is off. If you control Enable from a GPIO, check the pin ratings, the pin
+state at boot, the driver circuit, and the power-off order after a fault, and
+wait for the supply to stabilize. Never sleep or cut power during an SD write or
+an HTTPS transaction.
 
 ## Verification checklist
 
-- Wiring: GPIO and signal direction, supply margins, all one-sided power cases.
-- UART: known frames, split/stale responses, timeout, CRC and maximum length.
-- Protocol: error frames, bad echo, signed temperature, firmware boundary.
-- Scheduling: manual/periodic collision, wraparound, Wi-Fi delays.
-- Storage: header, CSV quoting, full/removal/corruption, reset mid-write.
-- Upload: offline recovery, redirects, TLS failure, `ok:false`, duplicate retry.
-- Time: no NTP, zone/offset, resynchronization, deep-sleep boot.
-- Endurance: continuous operation, RSSI, temperature, power, and wet/dry change
-  at the intended installation.
+- Wiring: GPIO assignment, signal direction, supply margin, and every case where
+  only one side is powered.
+- UART: known frames, split and stale responses, timeouts, CRC, and maximum
+  length.
+- Protocol: error frames, echo mismatch, signed temperature, and the firmware
+  version boundary.
+- Scheduling: collisions between manual and periodic measurements, `millis()`
+  wraparound, and Wi-Fi delays.
+- Storage: the first header write, CSV quoting, full, removed, or corrupted
+  media, and a reset during a write.
+- Upload: recovery from offline, redirects, TLS failure, 401-equivalent errors,
+  `ok:false`, and duplicate retries.
+- Time: no NTP, time zone and offset, resynchronization, and wake from deep
+  sleep.
+- Endurance: continuous operation, RSSI, temperature, power margin, and wet/dry
+  changes at the intended installation.
 
-Inject hardware faults only through approved switches or fixtures; do not
-hot-plug the sensor wiring during testing.
+Do not hot-plug the sensor wiring during testing. Inject hardware faults only
+through switches or fixtures built for that purpose.

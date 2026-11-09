@@ -1,2 +1,2 @@
 # Tooling used by the public CI workflow. Runtime users do not need this file.
-platformio==6.2.0
+platformio==6.1.19
